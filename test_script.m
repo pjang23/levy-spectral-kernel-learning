@@ -1,8 +1,8 @@
-% Load up gpml
+%% Load up gpml
 addpath gpml
 startup
 
-% Load up data
+%% Load up data
 load('airline.mat')
 ntrain = length(xtrain);
 ntest = length(xtest);
@@ -12,12 +12,13 @@ N = length(X);
 y_clean = ytrain;
 
 
-% De-mean training data
+%% De-mean training data
 % mean_trend = @(x)[ones(size(x,1)] to subtract sample mean
 % mean_trend = @(x)[ones(size(x,1),x] to subtract linear trend
 % mean_trend = @(x)[ones(size(x,1),x,x.^2] to subtract quadratic trend
-mean_trend = @(x)[ones(size(x,1),1)];
-% mean_trend = @(x)[ones(size(x,1),1),x];
+
+% mean_trend = @(x)[ones(size(x,1),1)];
+mean_trend = @(x)[ones(size(x,1),1),x];
 mean_param = regress(ytrain,mean_trend(xtrain));
 mean_fcn = @(x)mean_trend(x)*mean_param;
 y = ytrain - mean_fcn(xtrain);
@@ -65,6 +66,7 @@ legend('Empirical','Gaussian','Laplace')
 hold off
 
 % Flags for whether to run MCMC on the log of parameters
+%  - log scale allows for greater variation in parameter sizes
 betalogscale = 1;
 lambdalogscale = 1;
 
@@ -207,21 +209,8 @@ T_RJMCMC = toc;
 fprintf('LARK RJMCMC finished in %g seconds\nJ_Final = %g\n', T_RJMCMC, samples.J(end))
 
 %% Compute acceptance probabilities
-update_steps = (accept(:,1) == 2);
-update_hyp_steps = (accept(:,1) == 4);
-birth_steps = (accept(:,1) == 1);
-death_steps = (accept(:,1) == 3)|(accept(:,1) == -1);
- 
-update_acceptrate(1) = sum(accept(update_steps,2))/sum(update_steps);
-update_acceptrate(2) = sum(accept(update_steps,3))/sum(update_steps);
-update_acceptrate(3) = sum(accept(update_steps,4))/sum(update_steps);
-update_acceptrate(4) = sum(accept(update_hyp_steps,5))/sum(update_hyp_steps);
-update_acceptrate(5) = sum(accept(update_hyp_steps,6))/sum(update_hyp_steps);
-birth_acceptrate = sum(accept(birth_steps,2)==1)/sum(birth_steps);
-death_acceptrate = sum(accept(death_steps,2)==1)/sum(death_steps);
+computeAcceptanceProbabilities(accept);
 
-fprintf('Acceptance probabilities:\nbeta   = %g \nchi    = %g\nlambda = %g\ngamma  = %g\neta    = %g\nbirth  = %g\ndeath  = %g\n\n', [update_acceptrate, birth_acceptrate, death_acceptrate])
-  
 %% Sample Predictive Distribution by sampling GPs conditional on with Levy kernel samples
 
 % Input locations to predict
