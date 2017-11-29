@@ -1,8 +1,8 @@
-%% Load up gpml
+%% 1. Load up gpml
 addpath gpml
 startup
 
-%% Load up data
+%% 2. Load up data
 load('airline.mat')
 ntrain = length(xtrain);
 ntest = length(xtest);
@@ -11,22 +11,23 @@ X = xtrain;
 N = length(X);
 y_clean = ytrain;
 
-
-%% De-mean training data
+%% 3. De-mean training data
 % mean_trend = @(x)[ones(size(x,1)] to subtract sample mean
 % mean_trend = @(x)[ones(size(x,1),x] to subtract linear trend
 % mean_trend = @(x)[ones(size(x,1),x,x.^2] to subtract quadratic trend
 
-% mean_trend = @(x)[ones(size(x,1),1)];
-mean_trend = @(x)[ones(size(x,1),1),x];
+mean_trend = @(x)[ones(size(x,1),1)];
+% mean_trend = @(x)[ones(size(x,1),1),x];
 mean_param = regress(ytrain,mean_trend(xtrain));
 mean_fcn = @(x)mean_trend(x)*mean_param;
 y = ytrain - mean_fcn(xtrain);
 
-% Set initial number of basis functions
+%% 4. Hyperparameter initialization
+
+%% 4a. Set initial number of basis functions
 J_0 = 5;
 
-% Find good initialization by fitting Gaussian mixture on empirical spectrum
+%% 4b. Find good initialization by fitting Gaussian mixture on empirical spectrum
 hypinit = initSMhypersadvanced(J_0,xtrain,y,1);
 
 init_wgt = exp(hypinit(1:J_0));
@@ -47,7 +48,7 @@ for j = 1:J_0
     init_lambda(j) = p(2);
 end
 
-% Initial Spectrum Plot
+%% 4c. Initial spectrum plot
 M = floor(ntrain/2);
 freq = [[0:M],[-M+1:1:-1]]'/ntrain; 
 freq = freq(1:M+1);
@@ -65,19 +66,18 @@ title('Initial Spectrum')
 legend('Empirical','Gaussian','Laplace')
 hold off
 
-% Flags for whether to run MCMC on the log of parameters
+%% 4d. Flags for whether to run MCMC on the log of parameters
 %  - log scale allows for greater variation in parameter sizes
 betalogscale = 1;
 lambdalogscale = 1;
 
-% Tune Levy process hyperparameters based on initial spectrum parameters
+%% 4e. Tune Levy process hyperparameters based on initial spectrum parameters
 if betalogscale == 1
     input_beta = log(init_beta);
 else
     input_beta = init_beta;
 end
 etaparams = gamfit(abs(input_beta));
-% etaparams = gamfit(abs(input_beta)*exp(-eps)*expint(eps));
 if lambdalogscale == 1
     input_lambda = log(init_lambda);
 else
@@ -86,16 +86,6 @@ end
 lamparams = gamfit(abs(input_lambda));
 eps = 0.0041;      % Levy process truncation bound for small beta
 alpha = 1;         % a-Stable parameter
-
-
-% etaparams =  fmincon(@(p) (gamcdf(log(0.1*var(y)),p(1),p(2))-0.025)^2 + (gamcdf(log(var(y)),p(1),p(2))-0.975)^2, [2.53;1], [-1,0;0,-1],[1;0]);
-% etaparams =  fmincon(@(p) (gamcdf(log(1/J_0*var(y)),p(1),p(2))-0.025)^2 + (gamcdf(log(var(y)),p(1),p(2))-0.975)^2, [2.53;1], [-1,0;0,-1],[1;0]);
-
-
-% p = fmincon(@(p)-ntrain*( log(p(1)) + log(p(2)) + gammaln(p(2)) + log(sin(pi*p(2)/2)) ) + (p(2)+1)*sum(log(abs(input_beta))),[1.1;1],[0,-1; 0,1; -1,0],[0,2,0]);
-% p = fmincon(@(p)-ntrain*( -p(2)*log(p(1)) + log(p(2)) + gammaln(p(2)) + log(sin(pi*p(2)/2)) ) + (p(2)+1)*sum(log(abs(input_beta))),[1;1],[0,-1; 0,1; -1,0],[0,2,-eps/min(abs(input_beta))]);
-% p = fmincon(@(p)-ntrain*( log(p(2)) + p(2)*log(eps) - p(2)*log(p(1)) ) + (p(2)+1)*sum(log(abs(input_beta))),[0.5;0.5],[0,-1; 0,1; -1,0],[0,2,-eps/min(abs(input_beta))]);
-% p = fmincon(@(p)-ntrain*( log(p(1)) - p(2)*log(p(3)) + log(p(2)) + gammaln(p(2)) + sin(pi*p(2)/2) ) - (p(2)+1)*sum(log(abs(input_beta))),[1;1;1],[0,-1,0; 0,1,0; -1,0,0; 0,0,-1],[0,2,0,0]);
 
 % Tune hyperhyperparameters to center on current hyperparameters
 % a_gam/b_gam*(xmax-xmin)*expint(eps) equals avg number of kernels
@@ -107,12 +97,9 @@ b_gam_0 = 6.45*(domain(2)-domain(1))*expint(eps)/25;
 a_eta_0 = etaparams(1);
 b_eta_0 = 1/etaparams(2);
 a_lam_0 = lamparams(1);
-b_lam_0 = 0.05/lamparams(2);
+b_lam_0 = 0.5/lamparams(2);
 gam_0 = a_gam_0/b_gam_0;
 eta_0 = 1/(a_eta_0/b_eta_0);
-
-
-
 
 % Struct for Initial Levy Prior
 LevyPrior_0.name = 'Gamma'; % 'Gamma', 'SymGamma', or 'Stable'
@@ -127,12 +114,23 @@ BasisFunction.function_ift = @(x, BFParams) Laplace_BF_ift(x, BFParams, lambdalo
 BasisFunction.hyperparams = [a_lam_0, b_lam_0];
 BasisFunction.lambdalogscale = lambdalogscale;
 
-% Summary to aid in Hyperparameter Tuning
+%% 4f. Summary to aid in Hyperparameter Tuning
 fprintf('\nPrior Hyperparameter Tuning:\n')
 fprintf('Average # Basis Functions: %.5f\n',a_gam_0/b_gam_0*(domain(2)-domain(1))*expint(eps))
-fprintf('Average of log(Beta): %.5f\n',a_eta_0/b_eta_0)
-fprintf('Average of log(Lambda): %.5f\n\n',a_lam_0/b_lam_0)
+if betalogscale == 1
+    fprintf('Average of log(Beta): %.5f\n',a_eta_0/b_eta_0)
+else
+    fprintf('Average of Beta: %.5f\n',a_eta_0/b_eta_0)
+end
+if lambdalogscale == 1
+    fprintf('Average of log(Lambda): %.5f\n\n',a_lam_0/b_lam_0)
+else
+    fprintf('Average of Lambda: %.5f\n\n',a_lam_0/b_lam_0)
+end
 
+%% 5. Setup and call RJ-MCMC
+
+%% 5a. RJ-MCMC parameter tuning
 % Noise Variance
 sigma2 = 0.001;
 
@@ -140,8 +138,8 @@ sigma2 = 0.001;
 % numSamples = 5000;
 % numSamples = 2500;
 % numSamples = 1000;
-% numSamples = 500;
-numSamples = 250;
+numSamples = 500;
+% numSamples = 250;
 % numSamples = 100;
 % numSamples = 2;
 
@@ -152,7 +150,6 @@ if lambdalogscale == 1
 else
     proposalStepSize = [1/eta_0, 0.2, mean(init_lambda), 0.2*gam_0, 0.2*eta_0];
 end
-
 
 % RJ-MCMC Move Type Probabilities
 birthProb = 0.1;
@@ -177,25 +174,25 @@ else
     theta_0(3,:) = init_lambda;
 end
 
-% Parameters for Structured Kernel Interpolation (SKI):
-useSKI = 1; % Set to 1 to use SKI. Set to 0 for exact covariance
+%% 5b. Parameters for Structured Kernel Interpolation (SKI):
+useSKI = 0; % Set to 1 to use SKI. Set to 0 for exact covariance
 
-% 1. Wrapper for the inverse Fourier transform of the basis function to make it compatible with GPML
+% i. Wrapper for the inverse Fourier transform of the basis function to make it compatible with GPML
 SKIParams.bf_ift_wrapper = @Laplace_BF_ift_wrapper;
 
-% 2. Grid of Inducing Points for SKI
+% ii. Grid of Inducing Points for SKI
 % If training data is small enough ( < O(10^4) ) then we can simply supply the whole training dataset as inputs.
-SKIParams.xg = [xtrain; xtest];                             % SKI grid points
+% SKIParams.xg = [xtrain; xtest];                             % SKI grid points
 % If training data is large, then supply number of grid points to SKIParams.ng and determine the grid based on training and testing inputs
-% SKIParams.ng = 100;                                         % Number of SKI grid points
-% SKIParams.xg = linspace(min([xtrain; xtest]),max([xtrain; xtest]),SKIParams.ng)';   % SKI grid points
+SKIParams.ng = 100;                                         % Number of SKI grid points
+SKIParams.xg = linspace(min([xtrain; xtest]),max([xtrain; xtest]),SKIParams.ng)';   % SKI grid points
 
-% 3. Conjugate Gradient Parameters - If SKI consistently fails to converge or is too slow, adjust these accordingly
+% iii. Conjugate Gradient Parameters - If SKI consistently fails to converge or is too slow, adjust these accordingly
 SKIParams.cg_maxit = 10000;                                  % Max Iterations for Conjugate Gradient in SKI
 SKIParams.cg_tol = 1e-8;                                    % Residual Tolerance for Conjugate Gradient in SKI
 SKIParams.cg_showit = 1;                                    % Display number of CG iterations to convergence (1 to activate)
 
-% Call RJ-MCMC to sample Levy Kernel Process posterior
+%% 5c. Call RJ-MCMC to sample Levy Kernel Process posterior
 % samples = struct containing sampled kernel parameters
 % accept = matrix containing types of steps and indicators for acceptance or rejection
 tic;
@@ -208,18 +205,34 @@ T_RJMCMC = toc;
 
 fprintf('LARK RJMCMC finished in %g seconds\nJ_Final = %g\n', T_RJMCMC, samples.J(end))
 
-%% Compute acceptance probabilities
-computeAcceptanceProbabilities(accept);
+%% 5d. Compute acceptance probabilities
 
-%% Sample Predictive Distribution by sampling GPs conditional on with Levy kernel samples
+% Used to diagnose the mixing of the MCMC run.
+update_steps = (accept(:,1) == 2);
+update_hyp_steps = (accept(:,1) == 4);
+birth_steps = (accept(:,1) == 1);
+death_steps = (accept(:,1) == 3)|(accept(:,1) == -1);
+
+update_acceptrate(1) = sum(accept(update_steps,2))/sum(update_steps);
+update_acceptrate(2) = sum(accept(update_steps,3))/sum(update_steps);
+update_acceptrate(3) = sum(accept(update_steps,4))/sum(update_steps);
+update_acceptrate(4) = sum(accept(update_hyp_steps,5))/sum(update_hyp_steps);
+update_acceptrate(5) = sum(accept(update_hyp_steps,6))/sum(update_hyp_steps);
+birth_acceptrate = sum(accept(birth_steps,2)==1)/sum(birth_steps);
+death_acceptrate = sum(accept(death_steps,2)==1)/sum(death_steps);
+
+fprintf('Acceptance probabilities:\nbeta   = %g \nchi    = %g\nlambda = %g\ngamma  = %g\neta    = %g\nbirth  = %g\ndeath  = %g\n\n', [update_acceptrate, birth_acceptrate, death_acceptrate])
+
+%% 6. Estimate Credible Interval of Predictive Distribution
 
 % Input locations to predict
 Xstar = [xtrain+0.5*(xtrain(2)-xtrain(1)); xtest];
+Nstar = length(Xstar);
 
-% Number of samples from predictive distribution (each sample kernel from the RJ-MCMC is used for once for a GP draw)
-% nPredict = 500;
+% Number of sample kernels to use
+nPredict = 500;
 % nPredict = 250;
-nPredict = 10;
+% nPredict = 10;
 % nPredict = 1;
 
 if nPredict > numSamples
@@ -227,18 +240,34 @@ if nPredict > numSamples
 end
 
 % 1 to use SKI, 0 for exact covariance
-useSKI = 1; 
+useSKI = 0; 
 if useSKI == 0
     fprintf('Calculating predictive distribution with exact covariances\n')
 else
     fprintf('Calculating predictive distribution with SKI approximation\n')
 end
 
+% 1 to estimate 2.5% and 97.5% quantiles of predictive distribution
+% 0 to estimate mean and variance of predictive distribution
+computeQuantile = 1;
+
+% Quantile calculation not available for SKI. Also cannot compute quantiles
+% if there are not enough samples.
+if useSKI == 1 || nPredict < 100
+    computeQuantile = 0; 
+end
+
+if computeQuantile == 1
+    fgf = zeros(Nstar,nPredict);
+    Zrand = randn(N+Nstar,nPredict);
+    samp_idx = 1;
+end
+fmugf = zeros(Nstar,1);
+fs2gf = zeros(Nstar,1);
+ymugf = zeros(Nstar,1);
+ys2gf = zeros(Nstar,1);
+
 % Compute GP Predictions over the last nPredict Random Kernels
-fmugf = zeros(length(Xstar),1);
-fs2gf = zeros(length(Xstar),1);
-ymugf = zeros(length(Xstar),1);
-ys2gf = zeros(length(Xstar),1);
 for s = numSamples-nPredict+1:numSamples
     fprintf('Predictive Sample %d\n',s-numSamples+nPredict)
     if nPredict == 1
@@ -248,11 +277,6 @@ for s = numSamples-nPredict+1:numSamples
     J_s = samples.J(s);
     JJ = [0; cumsum(samples.J*3)];
     theta = reshape(samples.theta(JJ(s)+1:JJ(s+1)), 3, J_s);
-    if betalogscale == 1
-        beta = exp(theta(1,:))';
-    else
-        beta = theta(1,:)';
-    end
     BFParams = theta(2:end,:)';
     
     tic
@@ -266,13 +290,11 @@ for s = numSamples-nPredict+1:numSamples
         hyp.mean = [];
         hyp.lik = 0.5*log(sigma2);
         covg = {@apxGrid,{gpcov},{SKIParams.xg}};% grid prediction
-    %     xg2 = linspace(min(X),max(Xstar),10000)';
-    %     covg = {@apxGrid,{gpcov},{xg2}};% grid prediction
-    
+
         opt.cg_maxit = 20000;
         opt.cg_tol = 1e-8;
         opt.cg_showit = 1;
-        opt.use_pred_var = 1; % Flag for Perturb-and-MAP (1 to activate, 0 to deactivate)
+        opt.use_pred_var = 1;
         if opt.use_pred_var == 1
             opt.pred_var = 100;
         elseif isfield(opt,'pred_var')
@@ -282,30 +304,44 @@ for s = numSamples-nPredict+1:numSamples
         [fmugf_s,fs2gf_s,ymugf_s,ys2gf_s] = postg.predict(Xstar);
     else
         % Compute exact covariance (for small training data sets)
-        tauX=linspace(0,(X(2)-X(1))*(length(X)-1),length(X))';
-        tauXstar=linspace(0,(Xstar(2)-Xstar(1))*(length(Xstar)-1),length(Xstar))';
         if betalogscale == 1
             beta = exp(theta(1,:)');
         else
             beta = theta(1,:)';
         end
-        % Recover optimal kernel
-        [k_analytical_xx] = BasisFunction.function_ift(tauX, BFParams)*beta;
-
-        % Apply kernel to test points
-        [k_analytical_zz] = BasisFunction.function_ift(tauXstar, BFParams)*beta;
-        K_Synth_xx = toeplitz(k_analytical_xx);
-        K_Synth_zz = toeplitz(k_analytical_zz);
-        K_Synth_zx = zeros(length(Xstar), length(X));
-
-        for i = 1:length(X)
-            for j = 1:length(Xstar)
-                tau = X(i) - Xstar(j);
-                K_Synth_zx(j,i) = BasisFunction.function_ift(tau, BFParams)*beta;
-            end
+        
+        % Check if input locations are equally spaced
+        eqspaceX = range(diff(X)) < 1e-8;
+        if eqspaceX
+            tauX = linspace(0,(X(2)-X(1))*(N-1),N)';
+        else
+            tauX = repmat(X,[1,N])-repmat(X',[N,1]);
         end
+        eqspaceXstar = range(diff(Xstar)) < 1e-8;
+        if eqspaceXstar
+            tauXstar = linspace(0,(Xstar(2)-Xstar(1))*(Nstar-1),Nstar)';
+        else
+            tauXstar = repmat(Xstar,[1,Nstar])-repmat(Xstar',[Nstar,1]);
+        end
+        
+        % Apply kernel to all training and test input pairs
+        
+        % If input locations are equally spaced, apply Toeplitz shortcut
+        if eqspaceX
+            K_Synth_xx = toeplitz(BasisFunction.function_ift(tauX, BFParams)*beta);
+        else
+            K_Synth_xx = reshape(BasisFunction.function_ift(tauX(:), BFParams)*beta,N,N);
+        end
+        if eqspaceXstar
+            K_Synth_zz = toeplitz(BasisFunction.function_ift(tauXstar, BFParams)*beta);
+        else
+            K_Synth_zz = reshape(BasisFunction.function_ift(tauXstar(:), BFParams)*beta,Nstar,Nstar);
+        end
+        tauXXstar = repmat(Xstar,[1,N])-repmat(X',[Nstar,1]);
+        K_Synth_zx = reshape(BasisFunction.function_ift(tauXXstar(:), BFParams)*beta,Nstar,N);
         fmugf_s = K_Synth_zx * ((K_Synth_xx + sigma2*eye(ntrain)) \ (y));
-        fs2gf_s = diag(K_Synth_zz - K_Synth_zx * ((K_Synth_xx + sigma2*eye(ntrain)) \ K_Synth_zx'));
+        fcovgf_s = K_Synth_zz - K_Synth_zx * ((K_Synth_xx + sigma2*eye(ntrain)) \ K_Synth_zx');
+        fs2gf_s = diag(fcovgf_s);
         ymugf_s = fmugf_s;
         ys2gf_s = fs2gf_s + sigma2;
     end
@@ -315,20 +351,33 @@ for s = numSamples-nPredict+1:numSamples
     % ystar = fstar + eps,  eps ~ N(0,sigma^2)
     % fstar|X,y ~ N(fmugf,fs2gf)
     % ystar|X,y ~ N(ymugf,ys2gf)
-    fmugf = fmugf + fmugf_s;
-    fs2gf = fs2gf + fs2gf_s;
-    ymugf = ymugf + ymugf_s;
-    ys2gf = ys2gf + ys2gf_s;
+    
+    % If quantiles are to be calculated, then compute a sample GP function
+    if computeQuantile == 1
+        % Do Cholesky on unconditional matrix to avoid non-PSD matrices
+        C_Synth = cholcov([K_Synth_xx, K_Synth_zx'; K_Synth_zx, K_Synth_zz])';
+        uncond = C_Synth*Zrand(1:size(C_Synth,2),samp_idx);
+        fgf(:,samp_idx) = mean_fcn(Xstar) + K_Synth_zx*(K_Synth_xx\(y-uncond(1:N)))+uncond(N+1:end);
+        samp_idx = samp_idx+1;
+    end
+    fmugf = fmugf + 1/nPredict*fmugf_s;
+    fs2gf = fs2gf + 1/nPredict*fs2gf_s;
+    ymugf = ymugf + 1/nPredict*ymugf_s;
+    ys2gf = ys2gf + 1/nPredict*ys2gf_s;
 end
-fmugf = 1/nPredict*fmugf;
-fs2gf = 1/nPredict*fs2gf;
-ymugf = 1/nPredict*ymugf;
-ys2gf = 1/nPredict*ys2gf;
-
 E_fstar_Synth = mean_fcn(Xstar) + ymugf;
-cov_fstar_Synth_95 = 2*sqrt(ys2gf);
-tauX=linspace(0,(X(2)-X(1))*(length(X)-1),length(X))';
+Std_fstar_Synth_95 = sqrt(ys2gf);
+if computeQuantile == 1
+    fstar_lower95 = quantile(fgf,0.025,2);
+    fstar_upper95 = quantile(fgf,0.975,2);
+else
+    fstar_lower95 = E_fstar_Synth - 2*Std_fstar_Synth_95;
+    fstar_upper95 = E_fstar_Synth + 2*Std_fstar_Synth_95;
+end
 
+%% 7. Plots to Visualize and Diagnose Results
+
+%% 7a. MAP Spectrum
 
 % Use MAP kernel for plots
 [~,s] = max(real(samples.log_Posterior));
@@ -342,11 +391,11 @@ else
     beta = theta(1,:)';
 end
 BFParams = theta(2:end,:)';
+tauX=linspace(0,max(X),N)';
 [k_analytical_xx] = BasisFunction.function_ift(tauX, BFParams)*beta;
-%% Plot bases
-theta = reshape(samples.theta(JJ(s)+1:JJ(s+1)), 3, J_s);
-% ylimits = log(10)*[.1, 10^10];
 
+% Plot MAP Spectrum
+theta = reshape(samples.theta(JJ(s)+1:JJ(s+1)), 3, J_s);
 X_frequency = linspace(domain(1), domain(2), 500);
 bases = RJMCMC_Decoder(theta, BasisFunction, betalogscale, X_frequency ,J_s);
 k_s = sum(bases, 2)+sigma2;
@@ -375,11 +424,9 @@ end
 scatter(centers, 0*ones(length(centers),1), 30, 'k', 'filled')
 plot(X_frequency, bases)
 hold off
-% set(gca, 'yscale', 'log')
-%     ylim([ylimits(1), ylimits(2)]);
 title(sprintf('Basis Functions (There are %g of them)', samples.J(s)))
 
-%% Plot other diagnostics
+%% 7b. Plot other diagnostics
 % Plot kernel
 figure(3); clf
 plot(tauX, k_analytical_xx)
@@ -400,11 +447,11 @@ scatter(s, samples.log_Posterior(s), 'filled'); hold off
 legend('log Posterior', 'log Likelihood', 'log Prior', 'Location', 'best')
 title('Log Posterior')
 
-%% Plot test points
+%% 7c. Plot predictive distribution vs withheld test data
 figure(2);clf
 hold on 
 ht = plot(Xstar, E_fstar_Synth, 'k');
-h = area(Xstar, [E_fstar_Synth+cov_fstar_Synth_95, -cov_fstar_Synth_95, -cov_fstar_Synth_95]);
+h = area(Xstar, [fstar_upper95, E_fstar_Synth-fstar_upper95, fstar_lower95-E_fstar_Synth]);
 set(h(1), 'visible', 'off')
 set(h(2), 'FaceColor', 0.8*[1, 1, 1])
 set(h(3), 'FaceColor', 0.8*[1, 1, 1])

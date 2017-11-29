@@ -40,6 +40,7 @@ function [samples,accept] = Levy_RJMCMC_Sampler(y, X, J_0, theta_0, numSamples, 
 % BasisFunction - structure
 %   BasisFunction.domain - 2 x 1: [xmin, xmax]
 %   BasisFunction.function - function handle
+%   BasisFunction.function_ift - inverse fourier transform handle
 %   BasisFunction.hyperparams - vector: [a_lambda, b_lambda]
 %      a_lambda controls skewness of basis function length scale samples
 %      b_lambda inversely controls the mean size of basis function length scales (smaller b_lambda -> wider basis functions)
@@ -81,6 +82,14 @@ else
 end
 
 N = length(y);
+
+% Check if input locations X are equally spaced and compute pairwise differences tauX
+eqspace = range(diff(X)) < 1e-8;
+if eqspace
+    tauX=linspace(0,(X(2)-X(1))*(length(X)-1),length(X))';
+else
+    tauX = repmat(X,[1,N])-repmat(X',[N,1]);
+end
 
 % Extract hyperparameters and hyperhyperparameters
 gam_0 = LevyPrior_0.hyperparams(1);
@@ -127,8 +136,11 @@ if useSKI == 0
     else
         beta = theta_0(1,:)';
     end
-    proposed_k = BasisFunction.function_ift(X,BFParams)*beta;
-    K_Synth = toeplitz(proposed_k) + sigma2*eye(N);
+    if eqspace
+        K_Synth = toeplitz(BasisFunction.function_ift(tauX,BFParams)*beta) + sigma2*eye(N);
+    else
+        K_Synth = reshape(BasisFunction.function_ift(tauX(:),BFParams)*beta,N,N) + sigma2*eye(N);
+    end
     C_Synth = cholcov(K_Synth + diag(1e-6*rand(length(K_Synth),1)));
     log_det = sum(log(diag(C_Synth)));
     data_fit = y'*(C_Synth \ (C_Synth' \ y))/2;
@@ -238,8 +250,11 @@ for s = 1:numSamples-1
                 else
                     proposed_beta = proposed_theta(1,:)';
                 end
-                proposed_k = BasisFunction.function_ift(X,proposed_BFParams)*proposed_beta;
-                K_Synth = toeplitz(proposed_k) + sigma2*eye(N);
+                if eqspace
+                    K_Synth = toeplitz(BasisFunction.function_ift(tauX,proposed_BFParams)*proposed_beta) + sigma2*eye(N);
+                else
+                    K_Synth = reshape(BasisFunction.function_ift(tauX(:),proposed_BFParams)*proposed_beta,N,N) + sigma2*eye(N);
+                end
                 C_Synth = cholcov(K_Synth + diag(1e-6*rand(length(K_Synth),1)));
                 if isempty(C_Synth)
                     proposed_log_Likelihood = -inf;
@@ -323,8 +338,11 @@ for s = 1:numSamples-1
                     else
                         proposed_beta = proposed_theta(1,:)';
                     end
-                    proposed_k = BasisFunction.function_ift(X,proposed_BFParams)*proposed_beta;
-                    K_Synth = toeplitz(proposed_k) + sigma2*eye(N);
+                    if eqspace
+                        K_Synth = toeplitz(BasisFunction.function_ift(tauX,proposed_BFParams)*proposed_beta) + sigma2*eye(N);
+                    else
+                        K_Synth = reshape(BasisFunction.function_ift(tauX(:),proposed_BFParams)*proposed_beta,N,N) + sigma2*eye(N);
+                    end
                     C_Synth = cholcov(K_Synth + diag(1e-6*rand(length(K_Synth),1)));
                     if isempty(C_Synth)
                         proposed_log_Likelihood = -inf;
@@ -395,8 +413,11 @@ for s = 1:numSamples-1
                 else
                     proposed_beta = proposed_theta(1,:)';
                 end
-                proposed_k = BasisFunction.function_ift(X,proposed_BFParams)*proposed_beta;
-                K_Synth = toeplitz(proposed_k) + sigma2*eye(N);
+                if eqspace
+                    K_Synth = toeplitz(BasisFunction.function_ift(tauX,proposed_BFParams)*proposed_beta) + sigma2*eye(N);
+                else
+                    K_Synth = reshape(BasisFunction.function_ift(tauX(:),proposed_BFParams)*proposed_beta,N,N) + sigma2*eye(N);
+                end
                 C_Synth = cholcov(K_Synth + diag(1e-6*rand(length(K_Synth),1)));
                 if isempty(C_Synth)
                     proposed_log_Likelihood = -inf;

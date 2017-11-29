@@ -1,7 +1,7 @@
 function [k] = Laplace_BF_ift(tau, BFParams,lambdalogscale)
 % Inverse Fourier transform of Laplace basis function
 % Inputs:
-% x = n x 1 vector of inputs
+% tau = n x 1 vector of inputs
 % BFParams = J x 2 matrix of basis function parameters
 %   BFParams(:,1) = chi
 %   BFParams(:,2) = lambda
