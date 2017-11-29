@@ -115,3 +115,23 @@ Using the posterior kernel samples, we can now approximate the mean, variance, a
 The first parameter to set is the number of posterior kernel samples to use, indicated by the 'nPredict' variable. This will take the last nPredict posterior kernels from the RJ-MCMC run.
 
 If the total number of training and testing inputs is small, we can calculate GP predictive distributions by exact covariances and compute the actual quantiles of sample functions. If the training and testing inputs is large, then we must resort to SKI and can only compute means and variances. The 'computeQuantile' flag will indicate whether to compute quantiles of sample functions, or to just estimate the interval as mean plus two standard deviations.
+
+
+
+%% 7. Plots
+
+A variety of plots to visualize and diagnose the results.
+
+%% 7a. MAP Spectrum
+
+Plots the spectral density with the Maximum a Posteriori parameter set, and compares to the empirical spectrum.
+
+%% 7b. Plot other diagnostics
+
+Three diagnostic plots. One shows the MAP kernel, one visualizes the migration of coefficients and frequencies, and the last shows the trace of the posterior over time, visualizing the mixing of the RJ-MCMC.
+
+%% 7c. Plot predictive distribution vs withheld test data
+
+Visualizes the estimated credible interval of the predictive distribution, and compares it to the withheld test data.
+
+
