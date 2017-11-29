@@ -84,7 +84,7 @@ Here the user sets up the parameters for the reversible jump MCMC algorithm and 
 
 'sigma2' is the noise variance inherent to 'y'. Larger values of sigma2 mean more of the variation in y is treated as noise, while smaller values of sigma2 mean more of the variation in y is treated as part of an underlying function of interest.
 
-The RJ-MCMC algorithm uses Metropolis-Hastings to accept/reject proposals, and the proposal step sizes are set relative to the size of the initial parameters. If there are too many/too few rejections, the user can adjust step sizes accordingly, and a diagnostic is provided in section 5d. to check the rates of acceptance/rejection.
+The RJ-MCMC algorithm uses Metropolis-Hastings to accept/reject proposals, and the proposal step sizes are set relative to the size of the initial parameters. If there are too many/too few rejections, the user can adjust step sizes accordingly, and a diagnostic is provided in Section 5d to check the rates of acceptance/rejection.
 
 The RJ-MCMC algorithm has three move types (Birth, Death, and Update) where a basis function is added, removed, or updated respectively. The user can adjust the relative proportions of these move types.
 
@@ -108,3 +108,10 @@ Calls the RJ-MCMC function and outputs a posterior sample of kernel parameters.
 Used to diagnose the mixing of the MCMC run. If acceptance rates are too high, then raise the proposal step size, and if acceptance rates are too low, then lower the proposal step size.
 
 
+%% 6. Estimate Credible Interval of Predictive Distribution
+
+Using the posterior kernel samples, we can now approximate the mean, variance, and credible interval of the predictive distribution with a Monte Carlo average. As the calculations are done over random posterior samples of kernels, the resulting estimates will incorporate kernel uncertainty.
+
+The first parameter to set is the number of posterior kernel samples to use, indicated by the 'nPredict' variable. This will take the last nPredict posterior kernels from the RJ-MCMC run.
+
+If the total number of training and testing inputs is small, we can calculate GP predictive distributions by exact covariances and compute the actual quantiles of sample functions. If the training and testing inputs is large, then we must resort to SKI and can only compute means and variances. The 'computeQuantile' flag will indicate whether to compute quantiles of sample functions, or to just estimate the interval as mean plus two standard deviations.
